@@ -1,33 +1,52 @@
-import express from 'express'
-import bodyParser from 'body-parser'
-import cors from 'cors'
-import dotenv from 'dotenv'
-import mongoose from 'mongoose'
-
-import ChatRoute from './routes/chatRoute.js'
-import MessageRoute from './routes/messageRoute.js'
-
+const express = require('express')
 const app = express()
+const PORT = 4000
 
-// middleware
-app.use(bodyParser.json({ limit: '30mb', extended: true }))
-app.use(bodyParser.urlencoded({ limit: '30mb', extended: true }))
+//New imports
+const http = require('http').Server(app)
+const cors = require('cors')
+
 app.use(cors())
 
-// to serve images inside public folder
-app.use(express.static('public'))
-app.use('/images', express.static('images'))
+const socketIO = require('socket.io')(http, {
+  cors: {
+    origin: 'http://localhost:3000'
+  }
+})
 
-dotenv.config()
-const PORT = 4040
+let users = []
 
-const CONNECTION = process.env.MONGODB_URI
-mongoose
-  .connect(CONNECTION, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => app.listen(PORT, () => console.log(`Listening at Port ${PORT}`)))
-  .catch(error => console.log(`${error} did not connect`))
+//Add this before the app.get() block
+socketIO.on('connection', socket => {
+  console.log(`⚡: ${socket.id} user just connected!`)
 
-app.use('/chat', ChatRoute)
-app.use('/message', MessageRoute)
+  socket.on('typing', (data) => socket.broadcast.emit('typingResponse', data));
 
-// app.listen(PORT, () => console.log(`Listening at Port ${PORT}`))
+  //Listens and logs the message to the console
+  socket.on('message', data => {
+    console.log(data)
+  })
+
+  //Listens when a new user joins the server
+  socket.on('newUser', data => {
+    //Adds the new user to the list of users
+    users.push(data)
+    console.log('NEW USER ADDED: ', { users })
+    //Sends the list of users to the client
+    socketIO.emit('newUserResponse', users)
+  })
+
+  socket.on('disconnect', () => {
+    console.log('🔥: A user disconnected')
+  })
+})
+
+app.get('/api', (req, res) => {
+  res.json({
+    message: 'Hello world'
+  })
+})
+
+http.listen(PORT, () => {
+  console.log(`Server listening on ${PORT}`)
+})
